@@ -1,0 +1,49 @@
+@use "./variables/colors";
+@use "./variables/typography";
+@use "./variables/radius";
+@use "./variables/shadows";
+@import url("https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap");
+
+// NOTE: 전역 스타일 최소화. 컴포넌트는 scoped + @use 변수 사용 (AGENTS.md 8.4)
+
+// ── CSS Custom Property Bridge ──
+// Enables icon fill and core tokens without SCSS @use in every component
+:root {
+  --tk-primary: #{colors.$color-primary};
+  --tk-primary-light: #{colors.$color-primary-light};
+  --tk-bg: #{colors.$color-bg};
+  --tk-surface: #{colors.$color-surface};
+  --tk-border: #{colors.$color-border};
+  --tk-text: #{colors.$color-text};
+  --tk-text-secondary: #{colors.$color-text-secondary};
+  --tk-text-muted: #{colors.$color-text-muted};
+  --tk-success: #{colors.$color-success};
+  --tk-danger: #{colors.$color-danger};
+  --tk-warning: #{colors.$color-warning};
+  --tk-icon-fill: #{colors.$icon-fill};
+  --tk-radius-sm: #{radius.$radius-sm};
+  --tk-radius-md: #{radius.$radius-md};
+  --tk-radius-lg: #{radius.$radius-lg};
+  --tk-shadow-sm: #{shadows.$shadow-sm};
+  --tk-shadow-md: #{shadows.$shadow-md};
+}
+
+body {
+  margin: 0;
+  font-family: typography.$font-family-base;
+  font-size: typography.$font-size-md;
+  color: colors.$color-text;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+// ── Global icon base style ──
+.tk-ico {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}

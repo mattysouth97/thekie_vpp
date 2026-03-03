@@ -1,0 +1,11 @@
+// NOTE: Layout tokens — page padding, grid, breakpoints. Tight density.
+
+@use "spacing" as *;
+
+$page-padding-x: $space-4;          // 12px desktop (was 24px)
+$page-padding-y: $space-4;          // 12px vertical rhythm (was 24px)
+$page-padding-x-mobile: $space-3;   // 8px mobile (was 16px)
+$content-max-width: 1400px;
+$grid-gutter: $space-3;             // 8px (was 16px)
+$breakpoint-tablet: 992px;
+$breakpoint-mobile: 768px;

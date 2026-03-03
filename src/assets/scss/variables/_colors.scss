@@ -1,0 +1,76 @@
+// ── THEKIE Color System ──
+// Fintech identity: precision, trust, technology, financial authority
+
+// ── Primitive palette: Indigo ──
+$indigo-50:  #eef0ff;
+$indigo-100: #dde3ff;
+$indigo-200: #c3ccfe;
+$indigo-300: #9ea9fc;
+$indigo-400: #7b82f8;
+$indigo-500: #4F6AF5;   // THEKIE primary
+$indigo-600: #4354e0;
+$indigo-700: #3742c3;
+$indigo-800: #2e389e;
+$indigo-900: #2b347d;
+$indigo-950: #0d1035;
+
+// ── Primitive palette: Slate ──
+$slate-50:  #f8fafc;
+$slate-100: #f1f5f9;
+$slate-200: #e2e8f0;
+$slate-300: #cbd5e1;
+$slate-400: #94a3b8;
+$slate-500: #64748b;
+$slate-600: #475569;
+$slate-700: #334155;
+$slate-800: #1e293b;
+$slate-900: #0f172a;
+
+// ── Primitive palette: Status ──
+$emerald-50:  #ecfdf5;
+$emerald-100: #dcfce7;
+$emerald-500: #10b981;
+$emerald-600: #059669;
+$red-50:      #fef2f2;
+$red-100:     #fecaca;
+$red-500:     #ef4444;
+$red-600:     #dc2626;
+$amber-50:    #fffbeb;
+$amber-100:   #fef3c7;
+$amber-500:   #f59e0b;
+$amber-600:   #d97706;
+$orange-500:  #f97316;
+
+// ── Semantic tokens ──
+$color-primary:       $indigo-500;
+$color-primary-hover: $indigo-600;
+$color-primary-dark:  $indigo-700;
+$color-primary-light: $indigo-100;
+$color-primary-bg:    $indigo-50;
+
+$color-bg:            $slate-50;
+$color-surface:       #ffffff;
+$color-border:        $slate-200;
+
+$color-text:           $slate-900;
+$color-text-secondary: $slate-500;
+$color-text-muted:     $slate-400;
+
+$color-success:     $emerald-500;
+$color-success-bg:  $emerald-50;
+$color-danger:      $red-500;
+$color-danger-bg:   $red-50;
+$color-warning:     $amber-500;
+$color-warning-bg:  $amber-50;
+$color-accent:      $orange-500;
+
+// ── Duotone icon tokens ──
+$icon-stroke:  $slate-800;
+$icon-fill:    $indigo-200;
+
+// ── Legacy aliases (backward compat while migrating) ──
+$bg-base: $color-bg;
+$text-primary: $color-text;
+$text-secondary: $color-text-secondary;
+$primary: $color-primary;
+$border-color: $color-border;

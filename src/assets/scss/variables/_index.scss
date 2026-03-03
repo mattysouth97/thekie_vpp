@@ -1,0 +1,8 @@
+// Forward all design tokens so components can: @use "@/assets/scss/variables" as v;
+
+@forward "colors";
+@forward "typography";
+@forward "spacing";
+@forward "layout";
+@forward "radius";
+@forward "shadows";
