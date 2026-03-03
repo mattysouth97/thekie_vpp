@@ -6,7 +6,7 @@ import basicSsl from "@vitejs/plugin-basic-ssl";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: "/vpp_agg_set_prototype_v1/",
+  base: "/thekie_vpp/",
   plugins: [vue(), vueJsx(), basicSsl()],
   optimizeDeps: {
     include: ["quill"],
