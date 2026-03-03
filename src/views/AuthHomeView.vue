@@ -11,6 +11,7 @@ import {
 } from "@/components/icons";
 import { useMarketStore } from "@/stores/market-store";
 
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN ?? "";
 
 const router = useRouter();
 const authStore = useAuthStore();
