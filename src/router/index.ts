@@ -8,6 +8,7 @@ import SavingsJoinView from "@/views/SavingsJoinView.vue";
 import ProjectDetailView from "@/views/ProjectDetailView.vue";
 import ProjectListView from "@/views/ProjectListView.vue";
 import FacilityListView from "@/views/FacilityListView.vue";
+import EquipmentRegisterView from "@/views/EquipmentRegisterView.vue";
 import LandingView from "@/views/LandingView.vue";
 import LoginView from "@/views/LoginView.vue";
 
@@ -98,6 +99,12 @@ const routes: RouteRecordRaw[] = [
         name: "facilityList",
         component: FacilityListView,
         meta: { title: "설비 관리 · THEKIE VPP" },
+      },
+      {
+        path: "equipment-register",
+        name: "equipmentRegister",
+        component: EquipmentRegisterView,
+        meta: { title: "설비 등록 · THEKIE VPP" },
       },
     ],
   },

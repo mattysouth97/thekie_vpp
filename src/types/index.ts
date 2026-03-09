@@ -11,3 +11,13 @@ export interface ApiResponseError {
   code?: string;
   status?: number;
 }
+
+export type {
+  Equipment,
+  EquipmentRegistrationPayload,
+  EquipmentType,
+  RtuInfo,
+  InverterInfo,
+  ConnectionProtocol,
+  EquipmentStatus,
+} from "./equipment";

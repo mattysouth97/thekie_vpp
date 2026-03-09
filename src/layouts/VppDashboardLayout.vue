@@ -4,7 +4,7 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMarketStore } from "@/stores/market-store";
-import { IcoSearch, IcoClose, IcoBell, IcoChevronDown, IcoLink, IcoUsers, IcoLogout, IcoBlockchain, IcoArrowRight, IcoCheck, IcoWeatherClear, IcoWeatherPartly, IcoWeatherWind, IcoWeatherRain, IcoWeatherCloud, IcoLightning, IcoHome, IcoWallet, IcoGlobe, IcoDocument, IcoMeter, IcoChartUp, IcoInfo, IcoStar, IcoSettings } from "@/components/icons";
+import { IcoSearch, IcoClose, IcoBell, IcoChevronDown, IcoLink, IcoUsers, IcoLogout, IcoBlockchain, IcoArrowRight, IcoCheck, IcoWeatherClear, IcoWeatherPartly, IcoWeatherWind, IcoWeatherRain, IcoWeatherCloud, IcoLightning, IcoHome, IcoWallet, IcoGlobe, IcoDocument, IcoMeter, IcoChartUp, IcoInfo, IcoStar, IcoSettings, IcoPlug } from "@/components/icons";
 import TkIcon from "@/components/TkIcon.vue";
 
 const route = useRoute();
@@ -306,6 +306,7 @@ onUnmounted(() => {
         <router-link to="/portfolio" class="vpp-header__tab" :class="{ 'vpp-header__tab--active': route.name === 'portfolio' }">포트폴리오</router-link>
         <router-link to="/power-status" class="vpp-header__tab" :class="{ 'vpp-header__tab--active': route.name === 'powerStatus' }">전력 현황</router-link>
         <router-link to="/facilities" class="vpp-header__tab" :class="{ 'vpp-header__tab--active': route.name === 'facilityList' }">설비 관리</router-link>
+        <router-link to="/equipment-register" class="vpp-header__tab" :class="{ 'vpp-header__tab--active': route.name === 'equipmentRegister' }">설비등록</router-link>
       </nav>
 
       <!-- Search (right side) -->
@@ -960,6 +961,10 @@ onUnmounted(() => {
       <router-link to="/facilities" class="vpp-bottom-nav__item" :class="{ 'vpp-bottom-nav__item--active': route.name === 'facilityList' }">
         <IcoMeter :size="22" :strokeWidth="2" />
         <span>설비</span>
+      </router-link>
+      <router-link to="/equipment-register" class="vpp-bottom-nav__item" :class="{ 'vpp-bottom-nav__item--active': route.name === 'equipmentRegister' }">
+        <IcoPlug :size="22" :strokeWidth="2" />
+        <span>설비등록</span>
       </router-link>
       <button v-if="showRightPanel" type="button" class="vpp-bottom-nav__item vpp-bottom-nav__item--panel" @click="rightPanelOpen = !rightPanelOpen">
         <IcoBell :size="22" :strokeWidth="2" />
