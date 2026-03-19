@@ -5,8 +5,8 @@ import vueJsx from "@vitejs/plugin-vue-jsx";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  base: "/thekie_vpp/",
+export default defineConfig(({ command }) => ({
+  base: command === "serve" ? "/" : "/thekie_vpp/",
   plugins: [vue(), vueJsx(), basicSsl()],
   optimizeDeps: {
     include: ["quill"],
@@ -34,4 +34,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

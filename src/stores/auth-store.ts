@@ -2,7 +2,8 @@ import { ref, computed } from "vue";
 import { defineStore } from "pinia";
 import RestClient from "@/api/rest-client";
 import AuthService from "@/api/auth-service";
-import type { AuthUser, LoginPayload, SignupPayload, LinkedMember } from "@/types/auth";
+import type { AuthUser, LoginPayload, SignupPayload, LinkedMember, StakeholderRole } from "@/types/auth";
+import { userTypeToRole, isInvestorRole, isDeveloperRole, isAuthorityRole } from "@/types/auth";
 
 const TOKEN_KEY = "thekie_auth_token";
 
@@ -21,6 +22,29 @@ export const useAuthStore = defineStore("authStore", () => {
   const userRole = computed(() => user.value?.role ?? "");
   const userName = computed(() => user.value?.name ?? "");
   const userType = computed(() => user.value?.userType ?? "individual");
+
+  // ── Platform role system ──
+  const primaryRole = computed<StakeholderRole>(
+    () => user.value?.primaryRole ?? userTypeToRole(userType.value),
+  );
+  const secondaryRoles = computed<StakeholderRole[]>(
+    () => user.value?.secondaryRoles ?? [],
+  );
+
+  /** Check if user has a specific role (primary or secondary) */
+  function hasRole(role: StakeholderRole): boolean {
+    return primaryRole.value === role || secondaryRoles.value.includes(role);
+  }
+
+  /** Check if user can access routes requiring any of the given roles */
+  function canAccess(requiredRoles: StakeholderRole[]): boolean {
+    if (requiredRoles.length === 0) return true;
+    return requiredRoles.some((r) => hasRole(r));
+  }
+
+  const isInvestor = computed(() => isInvestorRole(primaryRole.value));
+  const isDeveloper = computed(() => isDeveloperRole(primaryRole.value));
+  const isAuthority = computed(() => isAuthorityRole(primaryRole.value));
 
   // ── Company linking & view toggle ──
   const viewMode = ref<"personal" | "company">("personal");
@@ -80,12 +104,12 @@ export const useAuthStore = defineStore("authStore", () => {
     initialized.value = true;
   }
 
-  async function quickLogin(): Promise<boolean> {
+  async function quickLogin(role?: StakeholderRole): Promise<boolean> {
     loading.value = true;
     error.value = "";
 
     try {
-      const result = await authService.quickLogin();
+      const result = await authService.quickLogin(role);
       if (result.success && result.user && result.token) {
         user.value = result.user;
         token.value = result.token;
@@ -176,6 +200,15 @@ export const useAuthStore = defineStore("authStore", () => {
     userRole,
     userName,
     userType,
+    // Platform role system
+    primaryRole,
+    secondaryRoles,
+    hasRole,
+    canAccess,
+    isInvestor,
+    isDeveloper,
+    isAuthority,
+    // Company linking
     viewMode,
     linkedCompany,
     linkedMembers,

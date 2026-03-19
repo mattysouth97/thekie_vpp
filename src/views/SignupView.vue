@@ -2,13 +2,44 @@
 import { ref, reactive, computed } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth-store";
-import { IcoArrowLeft, IcoLightning, IcoBlockchain, IcoGlobe, IcoBuilding, IcoDocument, IcoUser, IcoMail, IcoLock, IcoEye, IcoEyeOff, IcoInfo, IcoArrowRight, IcoGithub } from "@/components/icons";
-import type { UserType } from "@/types/auth";
+import { IcoArrowLeft, IcoLightning, IcoBlockchain, IcoGlobe, IcoBuilding, IcoDocument, IcoUser, IcoMail, IcoLock, IcoEye, IcoEyeOff, IcoInfo, IcoArrowRight, IcoGithub, IcoSolar, IcoUsers } from "@/components/icons";
+import type { UserType, StakeholderRole } from "@/types/auth";
+import { ROLE_LABELS } from "@/types/auth";
 
 const router = useRouter();
 const authStore = useAuthStore();
 
-const userType = ref<UserType>("individual");
+// ── Role selection ──
+interface RoleOption {
+  role: StakeholderRole;
+  label: string;
+  desc: string;
+  icon: string;
+  userType: UserType;
+}
+
+const roleOptions: RoleOption[] = [
+  { role: "investor_individual", label: "개인 투자자", desc: "프로젝트에 투자하고 수익을 받으세요", icon: "user", userType: "individual" },
+  { role: "investor_corporate", label: "법인 투자자", desc: "법인 명의로 투자 · RE100 이행", icon: "building", userType: "business" },
+  { role: "project_developer", label: "프로젝트 개발사", desc: "프로젝트를 등록하고 자금을 모집하세요", icon: "solar", userType: "business" },
+  { role: "government_authority", label: "정부 / 지자체", desc: "블록체인 투명성 보고서 열람", icon: "globe", userType: "individual" },
+];
+
+const selectedRole = ref<StakeholderRole>("investor_individual");
+
+const userType = computed<UserType>(() => {
+  const opt = roleOptions.find((r) => r.role === selectedRole.value);
+  return opt?.userType ?? "individual";
+});
+
+const isBusiness = computed(() => userType.value === "business");
+
+function selectRole(role: StakeholderRole) {
+  selectedRole.value = role;
+  localError.value = "";
+  authStore.clearError();
+}
+
 const form = reactive({
   name: "",
   email: "",
@@ -25,13 +56,6 @@ const localError = ref("");
 
 const loading = computed(() => authStore.loading);
 const displayError = computed(() => localError.value || authStore.error);
-const isBusiness = computed(() => userType.value === "business");
-
-function switchTab(type: UserType) {
-  userType.value = type;
-  localError.value = "";
-  authStore.clearError();
-}
 
 async function handleSignup() {
   localError.value = "";
@@ -76,6 +100,7 @@ async function handleSignup() {
     passwordConfirm: form.passwordConfirm,
     agreeTerms: form.agreeTerms,
     userType: userType.value,
+    primaryRole: selectedRole.value,
     ...(isBusiness.value && {
       companyName: form.companyName.trim(),
       businessNumber: form.businessNumber.trim(),
@@ -83,7 +108,7 @@ async function handleSignup() {
   });
 
   if (success) {
-    router.push("/");
+    router.push("/dashboard");
   }
 }
 
@@ -127,7 +152,7 @@ function goLogin() {
           <path d="M319.86 47.8131V4.45364H363V9.38828H326.154V22.4032H361.228V27.3378H326.154V42.8807H363V47.8153H319.86V47.8131Z" fill="currentColor"/>
         </svg>
 
-        <div class="signup-left__tagline">VPP 전력 정산 플랫폼</div>
+        <div class="signup-left__tagline">재생에너지 플랫폼 생태계</div>
 
         <div class="signup-left__benefits">
           <div class="sbenefit">
@@ -165,14 +190,28 @@ function goLogin() {
     <div class="signup-right">
       <div class="signup-form-wrap">
 
-        <div class="lf-tabs">
-          <button type="button" :class="['lf-tabs__btn', { 'lf-tabs__btn--active': !isBusiness }]" @click="switchTab('individual')">일반사용자</button>
-          <button type="button" :class="['lf-tabs__btn', { 'lf-tabs__btn--active': isBusiness }]" @click="switchTab('business')">법인사업자</button>
+        <!-- Role selector -->
+        <div class="lf-roles">
+          <button
+            v-for="opt in roleOptions"
+            :key="opt.role"
+            type="button"
+            :class="['lf-role', { 'lf-role--active': selectedRole === opt.role }]"
+            @click="selectRole(opt.role)"
+          >
+            <div class="lf-role__icon">
+              <IcoUsers v-if="opt.icon === 'user'" :size="14" :strokeWidth="2" />
+              <IcoBuilding v-else-if="opt.icon === 'building'" :size="14" :strokeWidth="2" />
+              <IcoSolar v-else-if="opt.icon === 'solar'" :size="14" :strokeWidth="2" />
+              <IcoGlobe v-else :size="14" :strokeWidth="2" />
+            </div>
+            <span class="lf-role__label">{{ opt.label }}</span>
+          </button>
         </div>
 
         <div class="signup-form__head">
-          <h1 class="signup-form__title">{{ isBusiness ? '법인 계정 등록' : '에너지 통장 만들기' }}</h1>
-          <p class="signup-form__sub">{{ isBusiness ? '사업자 정보를 입력하세요' : '무료로 시작하세요' }}</p>
+          <h1 class="signup-form__title">{{ ROLE_LABELS[selectedRole] }} 계정 만들기</h1>
+          <p class="signup-form__sub">{{ roleOptions.find(r => r.role === selectedRole)?.desc }}</p>
         </div>
 
         <form class="signup-form" @submit.prevent="handleSignup" novalidate>
@@ -472,32 +511,63 @@ $bg: #f8fafc;
   max-width: 400px;
 }
 
-// ── Tabs ─────────────────────────────────────────────────────────────────────
-.lf-tabs {
-  display: flex;
-  border-bottom: 2px solid $border;
+// ── Role selector ────────────────────────────────────────────────────────────
+.lf-roles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
   margin-bottom: 24px;
 }
 
-.lf-tabs__btn {
-  flex: 1;
-  padding: 12px 0;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  font-size: 14px;
-  font-weight: 600;
-  font-family: "Inter", sans-serif;
-  color: $text-muted;
+.lf-role {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: $bg;
+  border: 1.5px solid $border;
+  border-radius: 10px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  font-family: "Inter", sans-serif;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 
-  &:hover { color: $text-secondary; }
+  &:hover {
+    border-color: #a3b3fa;
+    background: #f8f9ff;
+  }
 
   &--active {
+    border-color: $accent;
+    background: #f0f4ff;
+    box-shadow: 0 0 0 2px rgba(79, 106, 245, 0.12);
+  }
+}
+
+.lf-role__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: $accent;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  .lf-role:not(.lf-role--active) & {
+    background: #e2e8f0;
+    color: $text-muted;
+  }
+}
+
+.lf-role__label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: $text-secondary;
+
+  .lf-role--active & {
     color: $accent;
-    border-bottom-color: $accent;
+    font-weight: 700;
   }
 }
 

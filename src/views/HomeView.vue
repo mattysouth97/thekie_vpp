@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { IcoSearch, IcoClose, IcoMapPin, IcoLightning, IcoInfo, IcoUser, IcoArrowRight } from "@/components/icons";
+import { IcoSearch, IcoClose, IcoMapPin, IcoLightning, IcoInfo } from "@/components/icons";
+import { IcoSolar, IcoWind } from "@/components/icons";
 import { useMarketStore } from "@/stores/market-store";
 
 const marketStore = useMarketStore();
@@ -166,46 +167,74 @@ function statusColor(status: string) {
   return "#ef4444";
 }
 
-// ── Energy AI Chatbot ──
-interface EnergyChat {
-  role: "user" | "assistant";
-  text: string;
+// ── SMP / REC Price Timeline (24h) ──
+const timeLabels = ["00", "02", "04", "06", "08", "10", "12", "14", "16", "18", "20", "22"];
+
+const smpPrices = [85, 82, 78, 76, 80, 95, 112, 125, 130, 128, 135, 142, 148, 145, 138, 132, 120, 115, 125, 135, 128, 118, 105, 92];
+const recPrices = [42.2, 42.1, 42.0, 42.0, 42.1, 42.3, 42.8, 43.2, 43.5, 43.4, 43.8, 44.2, 44.5, 44.3, 44.0, 43.6, 43.2, 43.0, 43.3, 43.8, 43.5, 43.1, 42.8, 42.4];
+
+const chartW = 520;
+const chartH = 100;
+
+function priceToPath(prices: number[], minV: number, maxV: number): string {
+  const stepX = chartW / (prices.length - 1);
+  return prices.map((v, i) => {
+    const x = i * stepX;
+    const y = chartH - ((v - minV) / (maxV - minV)) * (chartH - 10) - 5;
+    return `${x},${y}`;
+  }).join(" ");
 }
 
-const energyChatInput = ref("");
-const energyChatMessages = ref<EnergyChat[]>([]);
-const energyChatLoading = ref(false);
+const smpMin = Math.min(...smpPrices) - 5;
+const smpMax = Math.max(...smpPrices) + 5;
+const smpPath = computed(() => priceToPath(smpPrices, smpMin, smpMax));
 
-const energyFaqQuestions = [
-  { q: "올해 SMP 전망은?", a: "2026년 SMP는 LNG 가격 안정화와 재생에너지 확대로 연평균 110~125원/kWh 수준이 예상됩니다. 다만 여름철 피크 시즌에는 일시적으로 150원대까지 상승할 수 있으며, 탄소배출권 가격 연동으로 하반기 소폭 상승 전망이 있습니다." },
-  { q: "RE100 정책 동향", a: "2026년 기준 RE100 가입 한국 기업은 95개사로 확대되었습니다. 정부는 제3자 PPA 활성화를 위해 전기사업법 개정안을 추진 중이며, 녹색프리미엄 단가도 인하 검토 중입니다. 특히 반도체·배터리 수출기업의 RE100 이행 압박이 강화되면서 PPA 수요가 급증하고 있습니다." },
-  { q: "지역별 재생에너지 이슈", a: "전남·전북 해상풍력 단지가 본격 착공에 들어가며 지역 수용성 문제가 부각되고 있습니다. 충남·경북 태양광은 농지 규제 강화로 신규 인허가가 어려워지는 추세이며, 제주도는 출력제한 빈도 증가로 ESS 연계 투자가 주목받고 있습니다." },
-  { q: "REC 가격 하반기 전망", a: "REC 현물가는 2026년 상반기 40,000~45,000원/REC 수준에서 거래되고 있습니다. 하반기에는 재생에너지 의무공급비율(RPS) 상향 조정과 RE100 수요 증가로 소폭 상승하여 45,000~50,000원대가 예상됩니다. 다만 대규모 태양광 공급 증가가 상승폭을 제한할 수 있습니다." },
+const recMin = Math.min(...recPrices) - 0.5;
+const recMax = Math.max(...recPrices) + 0.5;
+const recPath = computed(() => priceToPath(recPrices, recMin, recMax));
+
+const smpCurrent = smpPrices[smpPrices.length - 1];
+const recCurrent = recPrices[recPrices.length - 1];
+const smpHigh = Math.max(...smpPrices);
+const smpLow = Math.min(...smpPrices);
+const recHigh = Math.max(...recPrices);
+const recLow = Math.min(...recPrices);
+
+interface TimelineEvent {
+  hour: number;
+  label: string;
+  type: "alert" | "config" | "market";
+}
+const timelineEvents: TimelineEvent[] = [
+  { hour: 7, label: "SMP 급등 시작", type: "alert" },
+  { hour: 12, label: "피크 가격 도달", type: "market" },
+  { hour: 18, label: "야간 전환", type: "config" },
 ];
 
-function sendEnergyFaq(q: string, a: string) {
-  energyChatMessages.value.push({ role: "user", text: q });
-  energyChatLoading.value = true;
-  setTimeout(() => {
-    energyChatMessages.value.push({ role: "assistant", text: a });
-    energyChatLoading.value = false;
-  }, 800);
+// ── Peak Demand Bar Chart (24h) ──
+const demandData = [28, 22, 18, 15, 14, 20, 35, 58, 75, 82, 88, 92, 95, 93, 85, 78, 70, 65, 72, 80, 76, 62, 48, 35];
+const peakStart = 9;
+const peakEnd = 16;
+
+// ── Generation Heatmap (24h blocks) ──
+const heatmapSolar = [0, 0, 0, 0, 0, 5, 25, 55, 75, 85, 92, 95, 98, 95, 88, 72, 45, 20, 5, 0, 0, 0, 0, 0];
+const heatmapWind = [65, 60, 55, 58, 62, 70, 68, 52, 45, 40, 38, 35, 32, 35, 42, 48, 55, 65, 72, 78, 82, 80, 75, 70];
+
+function heatColor(val: number, type: "solar" | "wind"): string {
+  if (type === "solar") {
+    if (val === 0) return "#f1f5f9";
+    if (val < 25) return "#fef3c7";
+    if (val < 50) return "#fcd34d";
+    if (val < 75) return "#f59e0b";
+    return "#d97706";
+  }
+  if (val < 25) return "#e0f2fe";
+  if (val < 50) return "#7dd3fc";
+  if (val < 75) return "#0ea5e9";
+  return "#0369a1";
 }
 
-function sendEnergyChat() {
-  const text = energyChatInput.value.trim();
-  if (!text) return;
-  energyChatMessages.value.push({ role: "user", text });
-  energyChatInput.value = "";
-  energyChatLoading.value = true;
-  setTimeout(() => {
-    energyChatMessages.value.push({
-      role: "assistant",
-      text: "좋은 질문입니다! 현재 에너지 정책 AI는 시범 운영 중입니다. 보다 정확한 답변을 위해 EPSIS(epsis.kpx.or.kr)를 참고하시거나, THEKIE 전문 상담팀(1588-0000)으로 문의해 주세요.",
-    });
-    energyChatLoading.value = false;
-  }, 1000);
-}
+const showTimeline = ref(true);
 </script>
 
 <template>
@@ -629,59 +658,197 @@ function sendEnergyChat() {
           </div>
         </div>
 
-        <!-- ── 에너지 정책 AI 어시스턴트 ── -->
-        <div class="ep-chat-section">
-          <div class="ep-chat-head">
-            <IcoInfo :size="14" :strokeWidth="2" />
-            <h2 class="ep-chat-title">에너지 정책 AI 어시스턴트</h2>
-            <span class="ep-chat-badge">Beta</span>
-          </div>
-          <p class="ep-chat-desc">에너지 정책, 시장 동향, 지역 이슈에 대해 AI에게 질문하세요</p>
-
-          <!-- FAQ quick buttons -->
-          <div class="ep-chat-faq">
-            <button
-              v-for="faq in energyFaqQuestions" :key="faq.q"
-              type="button"
-              class="ep-chat-faq__btn"
-              @click="sendEnergyFaq(faq.q, faq.a)"
-            >{{ faq.q }}</button>
-          </div>
-
-          <!-- Messages -->
-          <div class="ep-chat-messages" v-if="energyChatMessages.length > 0">
-            <div
-              v-for="(msg, i) in energyChatMessages" :key="i"
-              class="ep-chat-msg"
-              :class="msg.role === 'user' ? 'ep-chat-msg--user' : 'ep-chat-msg--ai'"
-            >
-              <div class="ep-chat-msg__avatar">
-                <IcoUser v-if="msg.role === 'user'" :size="12" :strokeWidth="2" />
-                <IcoLightning v-else :size="12" :strokeWidth="2" />
-              </div>
-              <div class="ep-chat-msg__bubble">{{ msg.text }}</div>
-            </div>
-            <div v-if="energyChatLoading" class="ep-chat-msg ep-chat-msg--ai">
-              <div class="ep-chat-msg__avatar"><IcoLightning :size="12" :strokeWidth="2" /></div>
-              <div class="ep-chat-msg__bubble ep-chat-msg__bubble--loading">
-                <span class="ep-chat-dots"><i></i><i></i><i></i></span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Input -->
-          <div class="ep-chat-input">
-            <input
-              v-model="energyChatInput"
-              type="text"
-              placeholder="에너지 정책에 대해 질문하세요..."
-              @keyup.enter="sendEnergyChat"
-            />
-            <button type="button" @click="sendEnergyChat">
-              <IcoArrowRight :size="14" :strokeWidth="2.5" />
+        <!-- ═══ SMP/REC Price Timeline + Peak Demand ═══ -->
+        <div v-if="showTimeline" class="tl">
+          <div class="tl__head">
+            <h2 class="tl__head-title">
+              <IcoLightning :size="14" :strokeWidth="2" />
+              시장 가격 타임라인
+            </h2>
+            <span class="tl__head-period">최근 24시간</span>
+            <button class="tl__head-close" @click="showTimeline = false">
+              <IcoClose :size="12" :strokeWidth="2.5" />
             </button>
           </div>
+
+          <!-- SMP / REC Price Line Chart -->
+          <div class="tl__chart-card">
+            <div class="tl__chart-header">
+              <div class="tl__chart-legends">
+                <span class="tl__legend"><span class="tl__legend-dot tl__legend-dot--smp"></span>SMP (원/kWh)</span>
+                <span class="tl__legend"><span class="tl__legend-dot tl__legend-dot--rec"></span>REC (천원/REC)</span>
+              </div>
+              <div class="tl__chart-stats">
+                <span class="tl__stat">
+                  <span class="tl__stat-label">SMP</span>
+                  <span class="tl__stat-val">{{ smpCurrent }}원</span>
+                  <span class="tl__stat-range">{{ smpLow }}~{{ smpHigh }}</span>
+                </span>
+                <span class="tl__stat">
+                  <span class="tl__stat-label">REC</span>
+                  <span class="tl__stat-val">{{ recCurrent.toFixed(1) }}천원</span>
+                  <span class="tl__stat-range">{{ recLow.toFixed(1) }}~{{ recHigh.toFixed(1) }}</span>
+                </span>
+              </div>
+            </div>
+
+            <div class="tl__chart-wrap">
+              <svg :viewBox="`0 0 ${chartW} ${chartH}`" preserveAspectRatio="none" class="tl__svg">
+                <line v-for="i in 5" :key="'g'+i" x1="0" :y1="chartH * i / 5" :x2="chartW" :y2="chartH * i / 5" stroke="#e2e8f0" stroke-width="0.5" stroke-dasharray="4,4" />
+                <rect :x="(peakStart / 24) * chartW" y="0" :width="((peakEnd - peakStart) / 24) * chartW" :height="chartH" fill="rgba(245, 158, 11, 0.06)" />
+                <line :x1="(peakStart / 24) * chartW" y1="0" :x2="(peakStart / 24) * chartW" :y2="chartH" stroke="#f59e0b" stroke-width="1" stroke-dasharray="3,3" opacity="0.5" />
+                <line :x1="(peakEnd / 24) * chartW" y1="0" :x2="(peakEnd / 24) * chartW" :y2="chartH" stroke="#f59e0b" stroke-width="1" stroke-dasharray="3,3" opacity="0.5" />
+                <polygon :points="`0,${chartH} ${smpPath} ${chartW},${chartH}`" fill="url(#smpGrad)" opacity="0.3" />
+                <polyline :points="smpPath" fill="none" stroke="#a855f7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+                <polygon :points="`0,${chartH} ${recPath} ${chartW},${chartH}`" fill="url(#recGrad)" opacity="0.3" />
+                <polyline :points="recPath" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+                <defs>
+                  <linearGradient id="smpGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#a855f7" stop-opacity="0.4" />
+                    <stop offset="100%" stop-color="#a855f7" stop-opacity="0" />
+                  </linearGradient>
+                  <linearGradient id="recGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.4" />
+                    <stop offset="100%" stop-color="#3b82f6" stop-opacity="0" />
+                  </linearGradient>
+                </defs>
+                <g v-for="ev in timelineEvents" :key="ev.hour">
+                  <circle :cx="(ev.hour / 24) * chartW" cy="8" r="4"
+                    :fill="ev.type === 'alert' ? '#ef4444' : ev.type === 'market' ? '#f59e0b' : '#22c55e'" stroke="#fff" stroke-width="1.5" />
+                </g>
+              </svg>
+              <div class="tl__time-labels">
+                <span v-for="t in timeLabels" :key="t">{{ t }}시</span>
+              </div>
+              <div class="tl__peak-label" :style="{ left: ((peakStart + (peakEnd - peakStart) / 2) / 24) * 100 + '%' }">
+                피크 시간대
+              </div>
+            </div>
+
+            <div class="tl__events">
+              <span class="tl__event-label">Events</span>
+              <div class="tl__event-markers">
+                <span v-for="ev in timelineEvents" :key="ev.hour" class="tl__event-tag"
+                  :class="{ 'tl__event-tag--alert': ev.type === 'alert', 'tl__event-tag--market': ev.type === 'market', 'tl__event-tag--config': ev.type === 'config' }"
+                >{{ ev.label }} ({{ ev.hour }}시)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Peak Demand Bar Chart -->
+          <div class="tl__chart-card">
+            <div class="tl__chart-header">
+              <div class="tl__chart-legends">
+                <span class="tl__legend"><span class="tl__legend-dot tl__legend-dot--demand"></span>전력 수요 (%)</span>
+              </div>
+              <div class="tl__chart-stats">
+                <span class="tl__stat">
+                  <span class="tl__stat-label">피크</span>
+                  <span class="tl__stat-val">{{ Math.max(...demandData) }}%</span>
+                </span>
+                <span class="tl__stat">
+                  <span class="tl__stat-label">피크 시간</span>
+                  <span class="tl__stat-val tl__stat-val--peak">{{ peakStart }}:00 ~ {{ peakEnd }}:00</span>
+                </span>
+              </div>
+            </div>
+            <div class="tl__bar-wrap">
+              <div class="tl__bar-chart">
+                <div
+                  v-for="(val, i) in demandData"
+                  :key="i"
+                  class="tl__bar"
+                  :class="{ 'tl__bar--peak': i >= peakStart && i < peakEnd }"
+                  :style="{ height: val + '%' }"
+                  :title="`${String(i).padStart(2, '0')}:00 — ${val}%`"
+                ></div>
+              </div>
+              <div class="tl__bar-peak-zone" :style="{
+                left: (peakStart / 24) * 100 + '%',
+                width: ((peakEnd - peakStart) / 24) * 100 + '%',
+              }"></div>
+              <div class="tl__time-labels">
+                <span v-for="t in timeLabels" :key="t">{{ t }}시</span>
+              </div>
+              <div class="tl__peak-marker tl__peak-marker--start" :style="{ left: (peakStart / 24) * 100 + '%' }">
+                <span class="tl__peak-marker-dot"></span>
+                {{ peakStart }}:00
+              </div>
+              <div class="tl__peak-marker tl__peak-marker--end" :style="{ left: (peakEnd / 24) * 100 + '%' }">
+                <span class="tl__peak-marker-dot"></span>
+                {{ peakEnd }}:00
+              </div>
+            </div>
+          </div>
+
+          <!-- Generation Heatmap -->
+          <div class="tl__chart-card">
+            <div class="tl__chart-header">
+              <div class="tl__chart-legends">
+                <span class="tl__legend">발전량 히트맵 (Capacity Factor)</span>
+              </div>
+            </div>
+            <div class="tl__heatmap">
+              <div class="tl__heatmap-row">
+                <span class="tl__heatmap-label">
+                  <IcoSolar :size="10" :strokeWidth="2" /> 태양광
+                </span>
+                <div class="tl__heatmap-cells">
+                  <div
+                    v-for="(val, i) in heatmapSolar"
+                    :key="'s'+i"
+                    class="tl__heatmap-cell"
+                    :style="{ background: heatColor(val, 'solar') }"
+                    :title="`${String(i).padStart(2, '0')}:00 — ${val}%`"
+                  ></div>
+                </div>
+              </div>
+              <div class="tl__heatmap-row">
+                <span class="tl__heatmap-label">
+                  <IcoWind :size="10" :strokeWidth="2" /> 풍력
+                </span>
+                <div class="tl__heatmap-cells">
+                  <div
+                    v-for="(val, i) in heatmapWind"
+                    :key="'w'+i"
+                    class="tl__heatmap-cell"
+                    :style="{ background: heatColor(val, 'wind') }"
+                    :title="`${String(i).padStart(2, '0')}:00 — ${val}%`"
+                  ></div>
+                </div>
+              </div>
+              <div class="tl__heatmap-peak" :style="{
+                left: `calc(52px + ${(peakStart / 24) * 100}% * (1 - 52 / 100))`,
+                width: `calc(${((peakEnd - peakStart) / 24) * 100}% * (1 - 52 / 100))`,
+              }"></div>
+              <div class="tl__time-labels" style="margin-left: 52px;">
+                <span v-for="t in timeLabels" :key="t">{{ t }}시</span>
+              </div>
+            </div>
+            <div class="tl__heatmap-legends">
+              <IcoInfo :size="12" :strokeWidth="2" />
+              <span class="tl__heatmap-scale">
+                <span class="tl__heatmap-scale-block" style="background: #fef3c7"></span>
+                <span class="tl__heatmap-scale-block" style="background: #fcd34d"></span>
+                <span class="tl__heatmap-scale-block" style="background: #f59e0b"></span>
+                <span class="tl__heatmap-scale-block" style="background: #d97706"></span>
+                태양광
+              </span>
+              <span class="tl__heatmap-scale">
+                <span class="tl__heatmap-scale-block" style="background: #e0f2fe"></span>
+                <span class="tl__heatmap-scale-block" style="background: #7dd3fc"></span>
+                <span class="tl__heatmap-scale-block" style="background: #0ea5e9"></span>
+                <span class="tl__heatmap-scale-block" style="background: #0369a1"></span>
+                풍력
+              </span>
+            </div>
+          </div>
         </div>
+
+        <button v-if="!showTimeline" class="tl__show-btn" @click="showTimeline = true">
+          <IcoLightning :size="12" :strokeWidth="2" />
+          시장 타임라인 보기
+        </button>
 
       </div>
     </div>
@@ -1383,229 +1550,374 @@ function sendEnergyChat() {
   padding-top: 8px;
 }
 
-// ── Energy Policy AI Chatbot ──────────────────────────────────────────────────
-$accent: #4F6AF5;
-$accent-light: #EEF2FF;
-$chat-text: #0f172a;
-$chat-muted: #94a3b8;
-$chat-secondary: #475569;
-$chat-border: #e2e8f0;
+// ═══ Timeline Charts ═══
+$tl-accent: #4F6AF5;
+$tl-text: #0f172a;
+$tl-muted: #94a3b8;
+$tl-border: #e2e8f0;
 
-.ep-chat-section {
-  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
-  border: 1px solid rgba(79,106,245,0.12);
-  border-radius: 12px;
-  padding: 14px 16px;
-  flex-shrink: 0;
-}
-
-.ep-chat-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-
-  svg { color: $accent; flex-shrink: 0; }
-}
-
-.ep-chat-title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--sg-text-muted);
-  margin: 0;
-}
-
-.ep-chat-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 7px;
-  border-radius: 9999px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  background: linear-gradient(135deg, $accent, #6366f1);
-  color: #fff;
-  margin-left: 6px;
-}
-
-.ep-chat-desc {
-  font-size: 11.5px;
-  color: $chat-secondary;
-  margin: 0 0 10px;
-  line-height: 1.5;
-}
-
-.ep-chat-faq {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-
-  &__btn {
-    background: #fff;
-    border: 1px solid $chat-border;
-    border-radius: 16px;
-    padding: 5px 12px;
-    font-size: 11px;
-    font-weight: 500;
-    color: $chat-secondary;
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
-    font-family: "Inter", sans-serif;
-
-    &:hover {
-      border-color: $accent;
-      color: $accent;
-      background: $accent-light;
-    }
-  }
-}
-
-.ep-chat-messages {
+.tl {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 260px;
-  overflow-y: auto;
-  margin-bottom: 10px;
-  padding: 2px 0;
-
-  &::-webkit-scrollbar { width: 4px; }
-  &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: $chat-border; border-radius: 2px; }
+  flex-shrink: 0;
 }
 
-.ep-chat-msg {
+.tl__head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.tl__head-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 800;
+  color: $tl-text;
+  margin: 0;
+
+  svg { color: $tl-accent; }
+}
+
+.tl__head-period {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: $tl-muted;
+  background: #f8fafc;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.tl__head-close {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  color: $tl-muted;
+  cursor: pointer;
+  border-radius: 4px;
+  &:hover { background: #f8fafc; color: $tl-text; }
+}
+
+.tl__chart-card {
+  background: #fff;
+  border: 1px solid $tl-border;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.tl__chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
   gap: 8px;
-  max-width: 88%;
+  flex-wrap: wrap;
+}
 
-  &--user {
-    flex-direction: row-reverse;
-    align-self: flex-end;
+.tl__chart-legends {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 
-    .ep-chat-msg__avatar {
-      background: $accent;
-      color: #fff;
-    }
+.tl__legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: $tl-muted;
+}
 
-    .ep-chat-msg__bubble {
-      background: $accent;
-      color: #fff;
-      border-radius: 14px 14px 2px 14px;
-    }
-  }
+.tl__legend-dot {
+  width: 8px;
+  height: 3px;
+  border-radius: 1.5px;
 
-  &--ai {
-    align-self: flex-start;
+  &--smp { background: #a855f7; }
+  &--rec { background: #3b82f6; }
+  &--demand { background: $tl-accent; }
+}
 
-    .ep-chat-msg__avatar {
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      color: #fff;
-    }
-  }
+.tl__chart-stats {
+  display: flex;
+  gap: 14px;
+}
 
-  &__avatar {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    background: #f8fafc;
-    color: $chat-muted;
-  }
+.tl__stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 
-  &__bubble {
-    background: #fff;
-    border: 1px solid $chat-border;
-    border-radius: 14px 14px 14px 2px;
-    padding: 8px 12px;
-    font-size: 12px;
-    line-height: 1.55;
-    color: $chat-text;
-    word-break: break-word;
+.tl__stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: $tl-muted;
+}
 
-    &--loading {
-      padding: 10px 18px;
-      display: flex;
-      align-items: center;
-    }
+.tl__stat-val {
+  font-size: 11px;
+  font-weight: 800;
+  color: $tl-text;
+  font-variant-numeric: tabular-nums;
+
+  &--peak {
+    color: #d97706;
+    background: rgba(245, 158, 11, 0.1);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
   }
 }
 
-.ep-chat-dots {
+.tl__stat-range {
+  font-size: 9px;
+  color: $tl-muted;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl__chart-wrap {
+  position: relative;
+}
+
+.tl__svg {
+  width: 100%;
+  height: 100px;
+  display: block;
+}
+
+.tl__time-labels {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0 0;
+  font-size: 8.5px;
+  font-weight: 600;
+  color: $tl-muted;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl__peak-label {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  font-size: 8px;
+  font-weight: 700;
+  color: #d97706;
+  background: rgba(245, 158, 11, 0.12);
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.tl__events {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba($tl-border, 0.5);
+}
+
+.tl__event-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: $tl-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.tl__event-markers {
   display: flex;
   gap: 4px;
-
-  i {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: $chat-muted;
-    animation: ep-dot-bounce 1.2s ease-in-out infinite;
-    display: block;
-
-    &:nth-child(2) { animation-delay: 0.15s; }
-    &:nth-child(3) { animation-delay: 0.3s; }
-  }
+  overflow-x: auto;
+  &::-webkit-scrollbar { display: none; }
 }
 
-@keyframes ep-dot-bounce {
-  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
-  30% { opacity: 1; transform: translateY(-3px); }
-}
-
-.ep-chat-input {
-  display: flex;
-  gap: 6px;
+.tl__event-tag {
+  display: inline-flex;
   align-items: center;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &--alert { background: rgba(239, 68, 68, 0.08); color: #dc2626; }
+  &--market { background: rgba(245, 158, 11, 0.08); color: #d97706; }
+  &--config { background: rgba(34, 197, 94, 0.08); color: #16a34a; }
+}
+
+.tl__bar-wrap {
+  position: relative;
+}
+
+.tl__bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 72px;
+  padding: 0;
+}
+
+.tl__bar {
+  flex: 1;
+  background: rgba($tl-accent, 0.25);
+  border-radius: 2px 2px 0 0;
+  transition: height 0.3s ease;
+  min-height: 2px;
+
+  &--peak {
+    background: $tl-accent;
+    opacity: 0.7;
+  }
+
+  &:hover {
+    opacity: 1;
+    background: $tl-accent;
+  }
+}
+
+.tl__bar-peak-zone {
+  position: absolute;
+  top: 0;
+  height: 72px;
+  background: rgba(245, 158, 11, 0.04);
+  border-left: 1.5px solid rgba(245, 158, 11, 0.4);
+  border-right: 1.5px solid rgba(245, 158, 11, 0.4);
+  pointer-events: none;
+}
+
+.tl__peak-marker {
+  position: absolute;
+  bottom: -2px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 8.5px;
+  font-weight: 700;
+  color: #d97706;
+  font-variant-numeric: tabular-nums;
+
+  &--start { color: #0891b2; }
+  &--end { color: #d97706; }
+}
+
+.tl__peak-marker-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 4px currentColor;
+}
+
+.tl__heatmap {
+  position: relative;
+}
+
+.tl__heatmap-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.tl__heatmap-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: $tl-muted;
+  width: 52px;
+  text-align: right;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.tl__heatmap-cells {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+
+.tl__heatmap-cell {
+  flex: 1;
+  height: 16px;
+  border-radius: 2px;
+  transition: transform 0.1s;
+  cursor: default;
+
+  &:hover { transform: scaleY(1.3); z-index: 1; }
+}
+
+.tl__heatmap-peak {
+  position: absolute;
+  top: 0;
+  height: calc(100% - 20px);
+  border-left: 1.5px solid rgba(245, 158, 11, 0.4);
+  border-right: 1.5px solid rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.04);
+  pointer-events: none;
+}
+
+.tl__heatmap-legends {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba($tl-border, 0.5);
+
+  svg { color: $tl-muted; }
+}
+
+.tl__heatmap-scale {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9px;
+  font-weight: 600;
+  color: $tl-muted;
+}
+
+.tl__heatmap-scale-block {
+  width: 10px;
+  height: 8px;
+  border-radius: 1.5px;
+}
+
+.tl__show-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: "Inter", sans-serif;
+  color: $tl-muted;
   background: #fff;
-  border: 1px solid $chat-border;
-  border-radius: 10px;
-  padding: 3px 3px 3px 12px;
-  transition: border-color 0.15s;
+  border: 1px dashed $tl-border;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.12s;
+  flex-shrink: 0;
 
-  &:focus-within {
-    border-color: $accent;
-    box-shadow: 0 0 0 2px rgba(79,106,245,0.08);
-  }
-
-  input {
-    flex: 1;
-    border: none;
-    outline: none;
-    font-size: 12px;
-    color: $chat-text;
-    background: transparent;
-    padding: 6px 0;
-    font-family: "Inter", sans-serif;
-
-    &::placeholder { color: $chat-muted; }
-  }
-
-  button {
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    border: none;
-    background: $accent;
-    color: #fff;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: background 0.15s;
-
-    &:hover { background: #3d58d9; }
-  }
+  &:hover { border-color: $tl-accent; color: $tl-accent; }
 }
 
 // ── Responsive ────────────────────────────────────────────────────────────────

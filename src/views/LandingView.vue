@@ -27,9 +27,9 @@ const heroOpacity = computed(() => {
 
 function goToDashboard() {
   if (authStore.isAuthenticated) {
-    router.push("/");
+    router.push("/dashboard");
   } else {
-    router.push("/login");
+    router.push("/marketplace/projects");
   }
 }
 
@@ -57,9 +57,9 @@ function closeUserMenu() {
 function handleMenuAction(action: string) {
   showUserMenu.value = false;
   switch (action) {
-    case "portfolio": router.push("/portfolio"); break;
-    case "settings": router.push("/"); break;
-    case "subscription": router.push("/"); break;
+    case "portfolio": router.push("/dashboard/portfolio"); break;
+    case "settings": router.push("/dashboard"); break;
+    case "subscription": router.push("/dashboard"); break;
     case "logout": authStore.logout(); break;
   }
 }
@@ -274,22 +274,22 @@ const plans = [
         </div>
 
         <h1 class="hero__title">
-          분산된 에너지 자원을<br>
-          <span class="hero__title-accent">하나의 시스템</span>으로 통합합니다
+          재생에너지 프로젝트의<br>
+          <span class="hero__title-accent">모든 이해관계자</span>를 연결합니다
         </h1>
 
         <p class="hero__desc">
-          THEKIE는 태양광 PV 포트폴리오의 금융·인허가·시공·운영·정산을 수행하는<br class="hero__br">
-          에너지 애그리게이터입니다. 본질적으로 불안정한 재생에너지에 안정성을 더합니다.
+          THEKIE는 투자자, 개발사, 지자체, 설비업체를 하나의 생태계로 연결하는<br class="hero__br">
+          재생에너지 플랫폼입니다. 블록체인 기반 투명성으로 신뢰를 보장합니다.
         </p>
 
         <div class="hero__cta-row">
           <button type="button" class="hero__cta-primary" @click="goToSignup">
             <IcoLightning :size="16" :strokeWidth="2.5" />
-            데모 요청하기
+            무료로 시작하기
           </button>
           <button type="button" class="hero__cta-ghost" @click="goToDashboard">
-            플랫폼 둘러보기
+            마켓플레이스 둘러보기
             <IcoArrowRight :size="14" :strokeWidth="2.5" />
           </button>
         </div>
@@ -627,7 +627,7 @@ const plans = [
             <path d="M298.84 47.8131V4.39188H305.134V47.8131H298.84Z" fill="currentColor"/>
             <path d="M319.86 47.8131V4.45364H363V9.38828H326.154V22.4032H361.228V27.3378H326.154V42.8807H363V47.8153H319.86V47.8131Z" fill="currentColor"/>
           </svg>
-          <p class="footer__tagline">VPP 에너지 애그리게이터 플랫폼</p>
+          <p class="footer__tagline">재생에너지 플랫폼 생태계</p>
         </div>
         <div class="footer__links">
           <div class="footer__col">

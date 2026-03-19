@@ -7,7 +7,9 @@ import type {
   AuthUser,
   LinkCompanyResponse,
   LinkedMember,
+  StakeholderRole,
 } from "@/types/auth";
+import { userTypeToRole } from "@/types/auth";
 
 const STORAGE_KEY = "thekie_users_db";
 const DELAY_MS = 800;
@@ -17,18 +19,33 @@ class AuthService extends BaseService {
     super(restClient);
   }
 
-  async quickLogin(): Promise<AuthResponse> {
+  private readonly DEMO_ACCOUNTS: Record<StakeholderRole, { id: string; email: string; name: string; role: string; userType: "individual" | "business" }> = {
+    investor_individual: { id: "demo-investor", email: "demo@thekie.com", name: "홍길동", role: "개인 투자자", userType: "individual" },
+    investor_corporate: { id: "demo-corp", email: "demo-corp@thekie.com", name: "김법인", role: "법인 투자자", userType: "business" },
+    project_developer: { id: "demo-dev", email: "demo-dev@thekie.com", name: "박개발", role: "프로젝트 개발사", userType: "business" },
+    landowner: { id: "demo-land", email: "demo-land@thekie.com", name: "이토지", role: "토지 소유자", userType: "individual" },
+    government_authority: { id: "demo-gov", email: "demo-gov@thekie.com", name: "정관리", role: "정부 담당자", userType: "individual" },
+    equipment_supplier: { id: "demo-supplier", email: "demo-supplier@thekie.com", name: "최설비", role: "설비 공급사", userType: "business" },
+    om_provider: { id: "demo-om", email: "demo-om@thekie.com", name: "한유지", role: "O&M 서비스", userType: "business" },
+    energy_buyer: { id: "demo-buyer", email: "demo-buyer@thekie.com", name: "강전력", role: "전력 수요기업", userType: "business" },
+  };
+
+  async quickLogin(role: StakeholderRole = "investor_individual"): Promise<AuthResponse> {
     await this.simulateDelay(300);
 
+    const acct = this.DEMO_ACCOUNTS[role];
     const demoUser: AuthUser = {
-      id: "demo-user-001",
-      email: "demo@thekie.com",
-      name: "홍길동",
-      displayName: "홍길동님",
-      role: "베짱이 투자자",
-      avatarInitial: "홍",
+      id: acct.id,
+      email: acct.email,
+      name: acct.name,
+      displayName: `${acct.name}님`,
+      role: acct.role,
+      avatarInitial: acct.name.charAt(0),
       createdAt: new Date().toISOString(),
-      userType: "individual",
+      userType: acct.userType,
+      primaryRole: role,
+      secondaryRoles: [],
+      organizationId: null,
     };
 
     const users = this.getUsersDb();
@@ -67,6 +84,13 @@ class AuthService extends BaseService {
       return { success: false, message: "비밀번호가 일치하지 않습니다." };
     }
 
+    // Backfill role fields for legacy users
+    if (!user.primaryRole) {
+      user.primaryRole = payload.primaryRole ?? userTypeToRole(user.userType);
+      user.secondaryRoles = [];
+      user.organizationId = null;
+    }
+
     const token = this.generateToken(user.id);
     return { success: true, user, token };
   }
@@ -80,15 +104,32 @@ class AuthService extends BaseService {
     }
 
     const isBusiness = payload.userType === "business";
+    const resolvedRole: StakeholderRole =
+      payload.primaryRole ?? userTypeToRole(payload.userType);
+
+    const ROLE_DISPLAY: Record<StakeholderRole, string> = {
+      investor_individual: "베짱이 투자자",
+      investor_corporate: "법인 관리자",
+      project_developer: "프로젝트 개발사",
+      landowner: "토지 소유자",
+      government_authority: "정부 담당자",
+      equipment_supplier: "설비 공급사",
+      om_provider: "O&M 서비스",
+      energy_buyer: "전력 수요기업",
+    };
+
     const newUser: AuthUser = {
       id: crypto.randomUUID(),
       email: payload.email,
       name: payload.name,
       displayName: `${payload.name}님`,
-      role: isBusiness ? "법인 관리자" : "베짱이 투자자",
+      role: ROLE_DISPLAY[resolvedRole],
       avatarInitial: payload.name.charAt(0),
       createdAt: new Date().toISOString(),
       userType: payload.userType,
+      primaryRole: resolvedRole,
+      secondaryRoles: [],
+      organizationId: null,
       ...(isBusiness && {
         companyName: payload.companyName,
         businessNumber: payload.businessNumber,
@@ -153,6 +194,13 @@ class AuthService extends BaseService {
     const user = users.find((u) => u.id === userId);
     if (!user) {
       return { success: false, message: "사용자를 찾을 수 없습니다." };
+    }
+
+    // Backfill role fields for users created before platform roles existed
+    if (!user.primaryRole) {
+      user.primaryRole = userTypeToRole(user.userType);
+      user.secondaryRoles = [];
+      user.organizationId = null;
     }
 
     return { success: true, user, token };

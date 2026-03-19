@@ -4,17 +4,75 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMarketStore } from "@/stores/market-store";
-import { IcoSearch, IcoClose, IcoBell, IcoChevronDown, IcoLink, IcoUsers, IcoLogout, IcoBlockchain, IcoArrowRight, IcoCheck, IcoWeatherClear, IcoWeatherPartly, IcoWeatherWind, IcoWeatherRain, IcoWeatherCloud, IcoLightning, IcoHome, IcoWallet, IcoGlobe, IcoDocument, IcoMeter, IcoChartUp, IcoInfo, IcoStar, IcoSettings, IcoPlug } from "@/components/icons";
+import { IcoClose, IcoBell, IcoChevronDown, IcoLink, IcoUsers, IcoLogout, IcoBlockchain, IcoArrowRight, IcoCheck, IcoLock, IcoWeatherClear, IcoWeatherPartly, IcoWeatherWind, IcoWeatherRain, IcoWeatherCloud, IcoLightning, IcoHome, IcoWallet, IcoGlobe, IcoDocument, IcoMeter, IcoChartUp, IcoInfo, IcoStar, IcoSettings, IcoPlug, IcoSolar } from "@/components/icons";
 import TkIcon from "@/components/TkIcon.vue";
+import LuciaWallet from "@/components/wallet/LuciaWallet.vue";
+import FloatingChatbot from "@/components/platform/FloatingChatbot.vue";
+import type { StakeholderRole } from "@/types/auth";
+import { ROLE_LABELS } from "@/types/auth";
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const marketStore = useMarketStore();
 
-const searchFocused = ref(false);
-const searchQuery = ref("");
-const mobileSearchOpen = ref(false);
+// ── Role-based navigation tabs ──
+interface NavTab {
+  label: string;
+  to: string;
+  activeNames: string[];  // route names that mark this tab active
+  icon: string;
+}
+
+const ROLE_NAV: Record<string, NavTab[]> = {
+  investor_individual: [
+    { label: "대시보드", to: "/dashboard", activeNames: ["home"], icon: "home" },
+    { label: "마켓플레이스", to: "/marketplace", activeNames: ["marketplaceProjects", "marketplaceProjectDetail", "marketplace"], icon: "document" },
+    { label: "포트폴리오", to: "/dashboard/portfolio", activeNames: ["portfolio"], icon: "chart" },
+    { label: "전력현황", to: "/dashboard/power-status", activeNames: ["powerStatus"], icon: "lightning" },
+    { label: "설비관리", to: "/facilities", activeNames: ["facilityList", "equipmentRegister"], icon: "meter" },
+  ],
+  investor_corporate: [
+    { label: "대시보드", to: "/dashboard", activeNames: ["home"], icon: "home" },
+    { label: "마켓플레이스", to: "/marketplace", activeNames: ["marketplaceProjects", "marketplaceProjectDetail", "marketplace"], icon: "document" },
+    { label: "포트폴리오", to: "/dashboard/portfolio", activeNames: ["portfolio"], icon: "chart" },
+    { label: "전력현황", to: "/dashboard/power-status", activeNames: ["powerStatus"], icon: "lightning" },
+    { label: "설비관리", to: "/facilities", activeNames: ["facilityList", "equipmentRegister"], icon: "meter" },
+  ],
+  project_developer: [
+    { label: "대시보드", to: "/developer", activeNames: ["developerDashboard"], icon: "home" },
+    { label: "내 프로젝트", to: "/developer/projects", activeNames: ["developerProjects", "projectWizard", "projectManagement"], icon: "solar" },
+    { label: "마켓플레이스", to: "/marketplace", activeNames: ["marketplaceProjects", "marketplaceProjectDetail", "marketplace"], icon: "document" },
+    { label: "부지검색", to: "/developer/land-search", activeNames: ["landSearch"], icon: "globe" },
+    { label: "설비등록", to: "/facilities/register", activeNames: ["equipmentRegister"], icon: "plug" },
+  ],
+  government_authority: [
+    { label: "대시보드", to: "/authority", activeNames: ["authorityDashboard"], icon: "home" },
+    { label: "프로젝트 감독", to: "/authority/projects", activeNames: ["projectOversight"], icon: "document" },
+    { label: "블록체인 검증", to: "/authority/blockchain", activeNames: ["blockchainExplorer"], icon: "blockchain" },
+    { label: "공유지 현황", to: "/authority/land-use", activeNames: ["landUseReport"], icon: "globe" },
+    { label: "보고서", to: "/authority/reports", activeNames: ["reportGenerator"], icon: "settings" },
+  ],
+};
+
+// Fallback for unauthenticated or unknown roles
+const DEFAULT_NAV: NavTab[] = [
+  { label: "홈", to: "/dashboard", activeNames: ["home"], icon: "home" },
+  { label: "마켓플레이스", to: "/marketplace", activeNames: ["marketplaceProjects", "marketplaceProjectDetail", "marketplace"], icon: "document" },
+  { label: "전력현황", to: "/dashboard/power-status", activeNames: ["powerStatus"], icon: "lightning" },
+  { label: "설비관리", to: "/facilities", activeNames: ["facilityList"], icon: "meter" },
+  { label: "설비등록", to: "/facilities/register", activeNames: ["equipmentRegister"], icon: "plug" },
+];
+
+const navTabs = computed<NavTab[]>(() => {
+  if (!authStore.isAuthenticated) return DEFAULT_NAV;
+  return ROLE_NAV[authStore.primaryRole] ?? DEFAULT_NAV;
+});
+
+function isTabActive(tab: NavTab): boolean {
+  return tab.activeNames.includes(route.name as string);
+}
+
 const plantTab = ref<'status' | 'weather'>('status');
 const rightPanelOpen = ref(false);
 const rightPanelCollapsed = ref<boolean>(
@@ -56,6 +114,7 @@ const showUserMenu = ref(false);
 const showLinkModal = ref(false);
 const showMemberList = ref(false);
 const showWalletModal = ref(false);
+const showChatbot = ref(false);
 const linkBusinessNumber = ref("");
 const linkError = ref("");
 const linkSuccess = ref("");
@@ -129,11 +188,11 @@ const currentTime = computed(() => {
   });
 });
 
-// Hide right panel if meta says so, or if on public projects page without login
+// Hide right panel if meta says so, or if on public pages without login
 const showRightPanel = computed(() => {
   if (route.meta.hideRightPanel) return false;
-  const isProjectPage = route.name === 'projectList' || route.name === 'projectDetail';
-  if (isProjectPage && !authStore.isAuthenticated) return false;
+  const publicPages = ['projectList', 'projectDetail', 'marketplaceProjects', 'marketplaceProjectDetail', 'marketplace'];
+  if (publicPages.includes(route.name as string) && !authStore.isAuthenticated) return false;
   return true;
 });
 
@@ -272,6 +331,51 @@ onMounted(() => {
 onUnmounted(() => {
   stopFeed();
 });
+
+// ── Authority: 지역에너지 자립률 & newsboard ──
+const newsBoardTab = ref<'notice' | 'inquiry'>('notice');
+
+const authorityRegions = [
+  { name: "제주특별자치도", rate: 89.4 },
+  { name: "전라남도",      rate: 67.8 },
+  { name: "강원도",        rate: 42.1 },
+  { name: "경기도",        rate: 28.5 },
+  { name: "서울특별시",    rate: 12.3 },
+];
+
+interface NoticeItem {
+  id: number;
+  type: '공지' | '청문' | '입법예고';
+  title: string;
+  date: string;
+  isNew: boolean;
+}
+
+interface InquiryItem {
+  id: number;
+  title: string;
+  author: string;
+  date: string;
+  status: '답변대기' | '답변완료';
+}
+
+const noticeItems = ref<NoticeItem[]>([
+  { id: 1, type: '공지',    title: '2026년도 지역에너지 계획 수립 공청회 개최 안내', date: '03.18', isNew: true },
+  { id: 2, type: '청문',    title: '영덕 해상풍력단지 환경영향평가 주민설명회',       date: '03.15', isNew: true },
+  { id: 3, type: '공지',    title: '소규모 태양광 설치 보조금 신청 접수 안내',       date: '03.10', isNew: false },
+  { id: 4, type: '입법예고', title: '재생에너지 주민이익공유제 시행령 개정안 예고',   date: '03.05', isNew: false },
+  { id: 5, type: '공지',    title: '2월 지역에너지 통계 월간 보고서 발간',           date: '02.28', isNew: false },
+]);
+
+const inquiryItems = ref<InquiryItem[]>([
+  { id: 1, title: '우리 마을 태양광 발전소 소음 관련 문의',          author: '홍길동',   date: '03.18', status: '답변대기' },
+  { id: 2, title: '농업용 창고 옥상 태양광 설치 허가 절차',         author: '김영희',   date: '03.17', status: '답변완료' },
+  { id: 3, title: '풍력발전 인근 부동산 가치 하락 보상 방법',        author: '이철수',   date: '03.14', status: '답변완료' },
+  { id: 4, title: 'RE100 이행수단으로 지역 PPA 계약 가능 여부',      author: 'GS에너지', date: '03.12', status: '답변대기' },
+  { id: 5, title: '공유지 태양광 임대 수익 배분 기준 문의',          author: '용인시 의회', date: '03.08', status: '답변완료' },
+]);
+
+const pendingInquiries = computed(() => inquiryItems.value.filter(i => i.status === '답변대기').length);
 </script>
 
 <template>
@@ -299,35 +403,18 @@ onUnmounted(() => {
         </svg>
       </div>
 
-      <!-- Nav tabs + CTA (left group) -->
+      <!-- Nav tabs (role-dynamic) -->
       <nav class="vpp-header__tabs">
-        <router-link to="/" class="vpp-header__tab" :class="{ 'vpp-header__tab--active': route.name === 'home' }">홈</router-link>
-        <router-link to="/projects" class="vpp-header__tab" :class="{ 'vpp-header__tab--active': route.name === 'projectList' || route.name === 'projectDetail' }">사업 현황</router-link>
-        <router-link to="/portfolio" class="vpp-header__tab" :class="{ 'vpp-header__tab--active': route.name === 'portfolio' }">포트폴리오</router-link>
-        <router-link to="/power-status" class="vpp-header__tab" :class="{ 'vpp-header__tab--active': route.name === 'powerStatus' }">전력 현황</router-link>
-        <router-link to="/facilities" class="vpp-header__tab" :class="{ 'vpp-header__tab--active': route.name === 'facilityList' }">설비 관리</router-link>
-        <router-link to="/equipment-register" class="vpp-header__tab" :class="{ 'vpp-header__tab--active': route.name === 'equipmentRegister' }">설비등록</router-link>
+        <router-link
+          v-for="tab in navTabs"
+          :key="tab.to"
+          :to="tab.to"
+          class="vpp-header__tab"
+          :class="{ 'vpp-header__tab--active': isTabActive(tab) }"
+        >{{ tab.label }}</router-link>
       </nav>
 
       <!-- Search (right side) -->
-      <button type="button" class="vpp-header__search-toggle" aria-label="검색" @click="mobileSearchOpen = !mobileSearchOpen">
-        <IcoSearch :size="18" :strokeWidth="2" />
-      </button>
-      <div class="vpp-header__search" :class="{ 'vpp-header__search--focused': searchFocused, 'vpp-header__search--mobile-open': mobileSearchOpen }">
-        <IcoSearch class="vpp-header__search-icon" :size="15" :strokeWidth="2" />
-        <input
-          v-model="searchQuery"
-          type="search"
-          class="vpp-header__search-input"
-          placeholder="발전소, 투자, 정산 검색..."
-          @focus="searchFocused = true"
-          @blur="searchFocused = false"
-        />
-        <button v-if="searchQuery" type="button" class="vpp-header__search-clear" aria-label="지우기" @click="searchQuery = ''">
-          <IcoClose :size="14" :strokeWidth="2" />
-        </button>
-      </div>
-
       <!-- Actions -->
       <div class="vpp-header__actions">
         <span class="vpp-header__time">{{ currentTime }}</span>
@@ -337,6 +424,11 @@ onUnmounted(() => {
           <button type="button" :class="['vpp-header__vt-btn', { 'vpp-header__vt-btn--active': authStore.viewMode === 'personal' }]" @click="authStore.viewMode = 'personal'">내 투자</button>
           <button type="button" :class="['vpp-header__vt-btn', { 'vpp-header__vt-btn--active': authStore.viewMode === 'company' }]" @click="authStore.viewMode = 'company'">{{ authStore.linkedCompany?.name || '법인' }}</button>
         </div>
+
+        <button type="button" class="vpp-header__ai-btn" aria-label="AI 어시스턴트" @click="showChatbot = !showChatbot">
+          <IcoLightning :size="14" :strokeWidth="2" />
+          <span class="vpp-header__ai-label">AI</span>
+        </button>
 
         <button type="button" class="vpp-header__wallet-btn" aria-label="Lucia Wallet" @click="showWalletModal = !showWalletModal">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -387,7 +479,7 @@ onUnmounted(() => {
           <div class="vpp-header__avatar">{{ authStore.avatarInitial }}</div>
           <div class="vpp-header__user-info">
             <span class="vpp-header__user-name">{{ authStore.displayName }}</span>
-            <span class="vpp-header__user-role">{{ authStore.userRole }}</span>
+            <span class="vpp-header__user-role">{{ ROLE_LABELS[authStore.primaryRole] || authStore.userRole }}</span>
           </div>
           <IcoChevronDown :size="14" :strokeWidth="2" />
           <div v-if="showUserMenu" class="vpp-header__user-menu">
@@ -487,6 +579,121 @@ onUnmounted(() => {
 
         <!-- Expanded content -->
         <template v-if="!rightPanelCollapsed">
+
+          <!-- ═══ GOVERNMENT AUTHORITY PANEL ═══ -->
+          <template v-if="authStore.primaryRole === 'government_authority'">
+
+            <div class="vpp-right__title">지역 에너지 현황</div>
+
+            <!-- 지역에너지 자립률 main card -->
+            <section class="vpp-panel vpp-panel--accent">
+              <div class="vpp-panel__label">지역에너지 자립률</div>
+              <div class="vpp-auth-rate">
+                <span class="vpp-auth-rate__val">34.7</span>
+                <span class="vpp-auth-rate__unit">%</span>
+                <span class="vpp-auth-rate__trend">▲ 2.3%p</span>
+              </div>
+              <div class="vpp-auth-rate__sub">2026년 2월 기준 · 국가목표 40%</div>
+              <div class="vpp-auth-rate__progress-wrap">
+                <div class="vpp-auth-rate__progress-track">
+                  <div class="vpp-auth-rate__progress-fill" style="width: 86.75%"></div>
+                  <div class="vpp-auth-rate__progress-target" title="목표 40%"></div>
+                </div>
+                <span class="vpp-auth-rate__progress-label">목표 달성률 86.8%</span>
+              </div>
+              <!-- Breakdown by type -->
+              <div class="vpp-auth-breakdown">
+                <div class="vpp-auth-breakdown__row">
+                  <span class="vpp-auth-bd__dot vpp-auth-bd__dot--solar"></span>
+                  <span class="vpp-auth-bd__label">태양광</span>
+                  <div class="vpp-auth-bd__bar"><div class="vpp-auth-bd__fill" style="width:52.4%"></div></div>
+                  <span class="vpp-auth-bd__val">18.2%</span>
+                </div>
+                <div class="vpp-auth-breakdown__row">
+                  <span class="vpp-auth-bd__dot vpp-auth-bd__dot--wind"></span>
+                  <span class="vpp-auth-bd__label">풍력</span>
+                  <div class="vpp-auth-bd__bar"><div class="vpp-auth-bd__fill vpp-auth-bd__fill--wind" style="width:28.2%"></div></div>
+                  <span class="vpp-auth-bd__val">9.8%</span>
+                </div>
+                <div class="vpp-auth-breakdown__row">
+                  <span class="vpp-auth-bd__dot vpp-auth-bd__dot--ess"></span>
+                  <span class="vpp-auth-bd__label">ESS</span>
+                  <div class="vpp-auth-bd__bar"><div class="vpp-auth-bd__fill vpp-auth-bd__fill--ess" style="width:11.8%"></div></div>
+                  <span class="vpp-auth-bd__val">4.1%</span>
+                </div>
+                <div class="vpp-auth-breakdown__row">
+                  <span class="vpp-auth-bd__dot vpp-auth-bd__dot--other"></span>
+                  <span class="vpp-auth-bd__label">기타</span>
+                  <div class="vpp-auth-bd__bar"><div class="vpp-auth-bd__fill vpp-auth-bd__fill--other" style="width:7.5%"></div></div>
+                  <span class="vpp-auth-bd__val">2.6%</span>
+                </div>
+              </div>
+            </section>
+
+            <!-- Regional comparison -->
+            <section class="vpp-panel">
+              <div class="vpp-panel__head">
+                <IcoGlobe :size="14" :strokeWidth="2" />
+                <span class="vpp-panel__label">시·도별 자립률</span>
+              </div>
+              <div class="vpp-auth-regions">
+                <div v-for="r in authorityRegions" :key="r.name" class="vpp-auth-region">
+                  <span class="vpp-auth-region__name">{{ r.name }}</span>
+                  <div class="vpp-auth-region__bar">
+                    <div class="vpp-auth-region__fill" :style="{ width: Math.min(r.rate, 100) + '%', background: r.rate >= 40 ? '#16a34a' : '#4F6AF5' }"></div>
+                  </div>
+                  <span class="vpp-auth-region__val" :class="{ 'vpp-auth-region__val--green': r.rate >= 40 }">{{ r.rate }}%</span>
+                </div>
+              </div>
+            </section>
+
+            <!-- Newsboard: 공지사항 / 문의사항 -->
+            <section class="vpp-panel vpp-newsboard">
+              <div class="vpp-newsboard__head">
+                <span class="vpp-newsboard__title">소통 게시판</span>
+                <span v-if="pendingInquiries > 0" class="vpp-newsboard__pending">미답변 {{ pendingInquiries }}건</span>
+              </div>
+
+              <!-- Tabs -->
+              <div class="vpp-tabs">
+                <button class="vpp-tab" :class="{ 'vpp-tab--active': newsBoardTab === 'notice' }" @click="newsBoardTab = 'notice'">공지사항</button>
+                <button class="vpp-tab" :class="{ 'vpp-tab--active': newsBoardTab === 'inquiry' }" @click="newsBoardTab = 'inquiry'">
+                  문의사항
+                  <span v-if="pendingInquiries > 0" class="vpp-tab__badge">{{ pendingInquiries }}</span>
+                </button>
+              </div>
+
+              <!-- 공지사항 -->
+              <div v-if="newsBoardTab === 'notice'" class="vpp-newsboard__list">
+                <div v-for="item in noticeItems" :key="item.id" class="vpp-newsboard__item">
+                  <div class="vpp-newsboard__item-meta">
+                    <span class="vpp-newsboard__type" :class="`vpp-newsboard__type--${item.type === '공지' ? 'notice' : item.type === '청문' ? 'hearing' : 'law'}`">{{ item.type }}</span>
+                    <span v-if="item.isNew" class="vpp-newsboard__new">N</span>
+                    <span class="vpp-newsboard__date">{{ item.date }}</span>
+                  </div>
+                  <div class="vpp-newsboard__item-title">{{ item.title }}</div>
+                </div>
+                <button class="vpp-newsboard__more-btn">전체 공지사항 보기 →</button>
+              </div>
+
+              <!-- 문의사항 -->
+              <div v-else class="vpp-newsboard__list">
+                <div v-for="item in inquiryItems" :key="item.id" class="vpp-newsboard__item">
+                  <div class="vpp-newsboard__item-meta">
+                    <span class="vpp-newsboard__status" :class="item.status === '답변완료' ? 'vpp-newsboard__status--done' : 'vpp-newsboard__status--pending'">{{ item.status }}</span>
+                    <span class="vpp-newsboard__author">{{ item.author }}</span>
+                    <span class="vpp-newsboard__date">{{ item.date }}</span>
+                  </div>
+                  <div class="vpp-newsboard__item-title">{{ item.title }}</div>
+                </div>
+                <button class="vpp-newsboard__more-btn">전체 문의사항 보기 →</button>
+              </div>
+            </section>
+
+          </template><!-- /authority panel -->
+
+          <!-- ═══ DEFAULT PANEL (investor / developer) ═══ -->
+          <template v-else>
           <!-- Portfolio identity title -->
           <div class="vpp-right__title">나의 정산 현황</div>
 
@@ -914,6 +1121,8 @@ onUnmounted(() => {
           </section>
           </template><!-- /projectList conditional -->
 
+          </template><!-- /investor panel (v-else) -->
+
         </template><!-- /expanded content -->
 
       </aside>
@@ -944,32 +1153,32 @@ onUnmounted(() => {
       </main>
     </div>
 
-    <!-- ── Mobile bottom navigation ── -->
+    <!-- ── Mobile bottom navigation (role-dynamic) ── -->
     <nav class="vpp-bottom-nav">
-      <router-link to="/" class="vpp-bottom-nav__item" :class="{ 'vpp-bottom-nav__item--active': route.name === 'home' }">
-        <IcoHome :size="22" :strokeWidth="2" />
-        <span>홈</span>
-      </router-link>
-      <router-link to="/power-status" class="vpp-bottom-nav__item" :class="{ 'vpp-bottom-nav__item--active': route.name === 'powerStatus' }">
-        <IcoLightning :size="22" :strokeWidth="2" />
-        <span>현황</span>
-      </router-link>
-      <router-link to="/projects" class="vpp-bottom-nav__item" :class="{ 'vpp-bottom-nav__item--active': route.name === 'projectList' }">
-        <IcoDocument :size="22" :strokeWidth="2" />
-        <span>사업현황</span>
-      </router-link>
-      <router-link to="/facilities" class="vpp-bottom-nav__item" :class="{ 'vpp-bottom-nav__item--active': route.name === 'facilityList' }">
-        <IcoMeter :size="22" :strokeWidth="2" />
-        <span>설비</span>
-      </router-link>
-      <router-link to="/equipment-register" class="vpp-bottom-nav__item" :class="{ 'vpp-bottom-nav__item--active': route.name === 'equipmentRegister' }">
-        <IcoPlug :size="22" :strokeWidth="2" />
-        <span>설비등록</span>
+      <router-link
+        v-for="tab in navTabs.slice(0, 4)"
+        :key="tab.to"
+        :to="tab.to"
+        class="vpp-bottom-nav__item"
+        :class="{ 'vpp-bottom-nav__item--active': isTabActive(tab) }"
+      >
+        <IcoHome v-if="tab.icon === 'home'" :size="22" :strokeWidth="2" />
+        <IcoDocument v-else-if="tab.icon === 'document'" :size="22" :strokeWidth="2" />
+        <IcoChartUp v-else-if="tab.icon === 'chart'" :size="22" :strokeWidth="2" />
+        <IcoLightning v-else-if="tab.icon === 'lightning'" :size="22" :strokeWidth="2" />
+        <IcoMeter v-else-if="tab.icon === 'meter'" :size="22" :strokeWidth="2" />
+        <IcoPlug v-else-if="tab.icon === 'plug'" :size="22" :strokeWidth="2" />
+        <IcoSolar v-else-if="tab.icon === 'solar'" :size="22" :strokeWidth="2" />
+        <IcoGlobe v-else-if="tab.icon === 'globe'" :size="22" :strokeWidth="2" />
+        <IcoBlockchain v-else-if="tab.icon === 'blockchain'" :size="22" :strokeWidth="2" />
+        <IcoSettings v-else-if="tab.icon === 'settings'" :size="22" :strokeWidth="2" />
+        <IcoHome v-else :size="22" :strokeWidth="2" />
+        <span>{{ tab.label }}</span>
       </router-link>
       <button v-if="showRightPanel" type="button" class="vpp-bottom-nav__item vpp-bottom-nav__item--panel" @click="rightPanelOpen = !rightPanelOpen">
         <IcoBell :size="22" :strokeWidth="2" />
-        <span>포트폴리오</span>
-        <span class="vpp-bottom-nav__badge">3</span>
+        <span>패널</span>
+        <span class="vpp-bottom-nav__badge">{{ unreadCount }}</span>
       </button>
     </nav>
 
@@ -1024,58 +1233,11 @@ onUnmounted(() => {
       </div>
     </Teleport>
 
-    <!-- ── Lucia Wallet Modal ── -->
-    <Teleport to="body">
-      <div v-if="showWalletModal" class="vpp-modal-overlay" @click.self="showWalletModal = false">
-        <div class="vpp-wallet-modal">
-          <div class="vpp-wallet-modal__head">
-            <div class="vpp-wallet-modal__brand">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <circle cx="8" cy="8" r="5" fill="#FF6B6B" opacity="0.85"/>
-                <circle cx="16" cy="8" r="5" fill="#4ECDC4" opacity="0.85"/>
-                <circle cx="12" cy="15" r="5" fill="#FFE66D" opacity="0.85"/>
-              </svg>
-              <span class="vpp-wallet-modal__brand-name">LUCIA</span>
-            </div>
-            <button type="button" class="vpp-modal__close" @click="showWalletModal = false">
-              <IcoClose :size="18" :strokeWidth="2" />
-            </button>
-          </div>
+    <!-- ── Lucia Wallet Drawer ── -->
+    <LuciaWallet :open="showWalletModal" @close="showWalletModal = false" />
 
-          <div class="vpp-wallet-modal__status">
-            <span class="vpp-wallet-modal__dot"></span>
-            연결됨
-          </div>
-
-          <div class="vpp-wallet-modal__card">
-            <div class="vpp-wallet-modal__addr-label">지갑 주소</div>
-            <div class="vpp-wallet-modal__addr">0x7A4f...921a</div>
-            <div class="vpp-wallet-modal__balance">₩2,340,000</div>
-            <div class="vpp-wallet-modal__currency">USDT</div>
-            <div class="vpp-wallet-modal__kyc">
-              <IcoCheck :size="10" :strokeWidth="3" />
-              KYC 인증 완료
-            </div>
-          </div>
-
-          <div class="vpp-wallet-modal__actions">
-            <button class="vpp-wallet-modal__btn vpp-wallet-modal__btn--primary">
-              <IcoArrowRight :size="14" :strokeWidth="2.5" style="transform:rotate(-90deg)" />
-              입금
-            </button>
-            <button class="vpp-wallet-modal__btn vpp-wallet-modal__btn--primary">
-              <IcoArrowRight :size="14" :strokeWidth="2.5" style="transform:rotate(90deg)" />
-              출금
-            </button>
-          </div>
-
-          <button class="vpp-wallet-modal__link" @click="showWalletModal = false">
-            <IcoBlockchain :size="13" :strokeWidth="2.2" />
-            블록체인 거래내역 보기
-          </button>
-        </div>
-      </div>
-    </Teleport>
+    <!-- ── Floating AI Chatbot ── -->
+    <FloatingChatbot :open="showChatbot" @close="showChatbot = false" />
 
   </div>
 </template>
@@ -1219,67 +1381,12 @@ $hdr-avatar-sz:  24px;
     }
   }
 
-  // ── Search ──
-  &__search-toggle {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    width: $hdr-control-h + 2px;          // 36px — slightly larger touch target
-    height: $hdr-control-h + 2px;
-    border: none;
-    background: transparent;
-    color: $text-secondary;
-    cursor: pointer;
-    border-radius: sp.$space-2;
-    &:hover { background: $bg; }
-  }
-  &__search {
-    flex: 0 1 320px;
-    max-width: 360px;
-    display: flex;
-    align-items: center;
-    gap: sp.$space-2;                     // 8px
-    height: $hdr-control-h;
-    padding: 0 sp.$space-3;              // 0 12px
-    background: $bg;
-    border: 1px solid $border;
-    border-radius: sp.$space-2;
-    margin-left: auto;                    // push search + actions to right
-    transition: border-color 0.15s, box-shadow 0.15s;
-
-    &--focused {
-      border-color: $accent;
-      box-shadow: 0 0 0 3px rgba(79, 106, 245, 0.12);
-    }
-  }
-  &__search-icon { color: $text-muted; flex-shrink: 0; }
-  &__search-input {
-    flex: 1;
-    min-width: 0;
-    border: none;
-    background: none;
-    font-size: $hdr-text-md;             // 13px — matches tabs
-    font-family: "Inter", sans-serif;
-    color: $text-primary;
-    outline: none;
-    &::placeholder { color: $text-muted; }
-  }
-  &__search-clear {
-    display: flex;
-    padding: sp.$space-1;                // 4px
-    border: none;
-    background: none;
-    color: $text-muted;
-    cursor: pointer;
-    border-radius: sp.$space-1;
-    &:hover { color: $text-secondary; }
-  }
-
   // ── Actions (right side) ──
   &__actions {
     display: flex;
     align-items: center;
     gap: sp.$space-2;                     // 8px
+    margin-left: auto;                    // push everything right of the nav tabs
   }
   &__time {
     font-size: $hdr-text-sm;             // 11px — secondary info
@@ -1302,6 +1409,26 @@ $hdr-avatar-sz:  24px;
     transition: background 0.15s, color 0.15s;
     &:hover { background: $bg; color: $text-primary; }
     &--badge { border-color: $border; }
+  }
+  &__ai-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: $hdr-control-h;
+    padding: 0 10px;
+    border: 1px solid $border;
+    background: $surface;
+    cursor: pointer;
+    border-radius: sp.$space-2;
+    transition: background 0.15s, border-color 0.15s;
+    color: $accent;
+    &:hover { background: $accent-light; border-color: $accent; }
+  }
+  &__ai-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: $accent;
+    white-space: nowrap;
   }
   &__wallet-btn {
     display: flex;
@@ -2559,26 +2686,6 @@ $bottom-nav-h: 60px;
     justify-content: space-between;
 
     &__tabs    { display: none; }    // nav goes to bottom bar
-    &__search  { display: none; }    // search hidden by default on mobile
-    &__search-toggle { display: flex; }
-
-    // Mobile search expands below header
-    &__search--mobile-open {
-      display: flex;
-      position: fixed;
-      top: $header-h;
-      left: 0;
-      right: 0;
-      max-width: none;
-      border-radius: 0;
-      border-left: none;
-      border-right: none;
-      border-top: none;
-      z-index: 200;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-      padding: 0 sp.$space-4;            // 16px
-      height: sp.$space-8;               // 48px
-    }
 
     &__time      { display: none; }
     &__user-info { display: none; }
@@ -2763,172 +2870,6 @@ $bottom-nav-h: 60px;
       align-items: center;
       justify-content: center;
     }
-  }
-}
-
-// ── Lucia Wallet Modal ──
-.vpp-wallet-modal {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-  border-radius: 20px;
-  padding: 28px;
-  width: 360px;
-  max-width: 92vw;
-  box-shadow: 0 24px 80px rgba(0,0,0,0.4);
-
-  &__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-
-    .vpp-modal__close {
-      color: #94a3b8;
-      &:hover { color: #fff; }
-    }
-  }
-
-  &__brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  &__brand-name {
-    font-size: 18px;
-    font-weight: 900;
-    color: #fff;
-    letter-spacing: 0.12em;
-  }
-
-  &__status {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11.5px;
-    font-weight: 700;
-    color: #4ade80;
-    margin-bottom: 20px;
-  }
-
-  &__dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: #4ade80;
-    box-shadow: 0 0 6px rgba(74,222,128,0.5);
-  }
-
-  &__card {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 14px;
-    padding: 20px;
-    margin-bottom: 16px;
-    text-align: center;
-  }
-
-  &__addr-label {
-    font-size: 10px;
-    font-weight: 600;
-    color: #64748b;
-    margin-bottom: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-  }
-
-  &__addr {
-    font-size: 13px;
-    font-weight: 600;
-    color: #94a3b8;
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    margin-bottom: 16px;
-  }
-
-  &__balance {
-    font-size: 28px;
-    font-weight: 900;
-    color: #fff;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.02em;
-    line-height: 1;
-  }
-
-  &__currency {
-    font-size: 12px;
-    font-weight: 700;
-    color: #64748b;
-    margin-top: 4px;
-    margin-bottom: 12px;
-  }
-
-  &__kyc {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    font-weight: 700;
-    color: #4ade80;
-    background: rgba(74,222,128,0.12);
-    padding: 4px 10px;
-    border-radius: 6px;
-  }
-
-  &__actions {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  &__btn {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 12px 0;
-    font-size: 13px;
-    font-weight: 700;
-    font-family: "Inter", sans-serif;
-    color: #e2e8f0;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.12s;
-
-    &:hover {
-      background: rgba(255,255,255,0.14);
-      border-color: rgba(255,255,255,0.22);
-    }
-
-    &--primary {
-      background: rgba(79,106,245,0.2);
-      border-color: rgba(79,106,245,0.3);
-      color: #93a8ff;
-
-      &:hover {
-        background: rgba(79,106,245,0.3);
-        border-color: rgba(79,106,245,0.4);
-      }
-    }
-  }
-
-  &__link {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    width: 100%;
-    padding: 10px 0;
-    font-size: 12px;
-    font-weight: 600;
-    font-family: "Inter", sans-serif;
-    color: #94a3b8;
-    background: none;
-    border: none;
-    cursor: pointer;
-    transition: color 0.12s;
-
-    &:hover { color: #fff; }
   }
 }
 
@@ -3374,5 +3315,348 @@ $bottom-nav-h: 60px;
 .tx-slide-leave-to {
   opacity: 0;
   transform: translateX(20px);
+}
+
+// ══════════════════════════════════════════
+// AUTHORITY PANEL — 지역에너지 자립률
+// ══════════════════════════════════════════
+
+// Main rate display
+.vpp-auth-rate {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 4px 0 2px;
+
+  &__val {
+    font-size: 40px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+
+  &__unit {
+    font-size: 20px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.75);
+  }
+
+  &__trend {
+    font-size: 12px;
+    font-weight: 700;
+    color: #bbf7d0;
+    background: rgba(255,255,255,0.12);
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: auto;
+  }
+
+  &__sub {
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 10px;
+  }
+}
+
+// Progress bar toward national target
+.vpp-auth-rate__progress-wrap {
+  margin-bottom: 14px;
+}
+
+.vpp-auth-rate__progress-track {
+  position: relative;
+  height: 7px;
+  background: rgba(255,255,255,0.18);
+  border-radius: 4px;
+  overflow: visible;
+  margin-bottom: 4px;
+}
+
+.vpp-auth-rate__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #86efac, #4ade80);
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+
+.vpp-auth-rate__progress-target {
+  position: absolute;
+  right: 0;
+  top: -3px;
+  width: 2px;
+  height: 13px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 1px;
+
+  &::after {
+    content: '목표';
+    position: absolute;
+    top: 14px;
+    right: 0;
+    font-size: 9px;
+    color: rgba(255,255,255,0.6);
+    white-space: nowrap;
+  }
+}
+
+.vpp-auth-rate__progress-label {
+  font-size: 10.5px;
+  color: rgba(255,255,255,0.6);
+  font-weight: 600;
+}
+
+// Breakdown by energy type
+.vpp-auth-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+}
+
+.vpp-auth-breakdown__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vpp-auth-bd {
+  &__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+
+    &--solar { background: #fbbf24; }
+    &--wind  { background: #22d3ee; }
+    &--ess   { background: #4ade80; }
+    &--other { background: rgba(255,255,255,0.4); }
+  }
+
+  &__label {
+    font-size: 10.5px;
+    color: rgba(255,255,255,0.7);
+    width: 36px;
+    flex-shrink: 0;
+  }
+
+  &__bar {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  &__fill {
+    height: 100%;
+    background: #fbbf24;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+
+    &--wind  { background: #22d3ee; }
+    &--ess   { background: #4ade80; }
+    &--other { background: rgba(255,255,255,0.35); }
+  }
+
+  &__val {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.85);
+    width: 32px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// Regional comparison
+.vpp-auth-regions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vpp-auth-region {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &__name {
+    font-size: 11px;
+    color: #475569;
+    width: 84px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__bar {
+    flex: 1;
+    height: 5px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  &__fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+
+  &__val {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    width: 36px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+
+    &--green { color: #16a34a; }
+  }
+}
+
+// ══════════════════════════════════════════
+// NEWSBOARD — 소통 게시판
+// ══════════════════════════════════════════
+
+.vpp-newsboard {
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  &__title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+    flex: 1;
+  }
+
+  &__pending {
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    background: #dc2626;
+    padding: 2px 7px;
+    border-radius: 10px;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 10px;
+  }
+
+  &__item {
+    padding: 8px 0;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+
+    &:last-of-type { border-bottom: none; }
+    &:hover .vpp-newsboard__item-title { color: #4F6AF5; }
+  }
+
+  &__item-meta {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 3px;
+  }
+
+  &__item-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.4;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    transition: color 0.15s;
+  }
+
+  &__type {
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+
+    &--notice  { background: #EEF2FF; color: #4F6AF5; }
+    &--hearing { background: #FEF3C7; color: #d97706; }
+    &--law     { background: #F0FDF4; color: #16a34a; }
+  }
+
+  &__status {
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+
+    &--done    { background: #F0FDF4; color: #16a34a; }
+    &--pending { background: #FEF2F2; color: #dc2626; }
+  }
+
+  &__new {
+    font-size: 8.5px;
+    font-weight: 800;
+    color: #fff;
+    background: #ef4444;
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+
+  &__author {
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  &__date {
+    font-size: 10px;
+    color: #94a3b8;
+    margin-left: auto;
+  }
+
+  &__more-btn {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 7px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    text-align: center;
+    font-family: "Inter", sans-serif;
+    transition: background 0.15s, color 0.15s;
+
+    &:hover { background: #EEF2FF; color: #4F6AF5; border-color: #c7d2fe; }
+  }
+}
+
+// Tab badge dot for inquiry count
+.vpp-tab__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+  background: #ef4444;
+  border-radius: 50%;
+  margin-left: 4px;
 }
 </style>
